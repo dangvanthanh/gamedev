@@ -1,0 +1,25 @@
+{
+  "name": "kings-and-pigs",
+  "version": "1.0.0",
+  "description": "> The Kings and Pigs game using Kaboom",
+  "main": "index.js",
+  "scripts": {
+    "dev": "live-server"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dangvanthanh/kings-and-pigs.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dangvanthanh/kings-and-pigs/issues"
+  },
+  "homepage": "https://github.com/dangvanthanh/kings-and-pigs#readme",
+  "devDependencies": {
+    "@dangvanthanh/prettier-config": "^1.0.0",
+    "live-server": "^1.2.1"
+  },
+  "prettier": "@dangvanthanh/prettier-config"
+}
