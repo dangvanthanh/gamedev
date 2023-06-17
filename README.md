@@ -1,6 +1,14 @@
-# Kings and Pigs
+# GameDev
 
-> The Kings and Pigs game using Kaboom
+> Game using React and Phaser
+
+## Technologies
+
+- [Rspack](https://www.rspack.dev/)
+- [React](https://react.dev/)
+- [TypeScript](https://www.typescriptlang.org/)
+- [Phaser](https://phaser.io/)
+- [bitECS](https://github.com/NateTheGreatt/bitECS)
 
 ## License
 

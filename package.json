@@ -1,25 +1,22 @@
 {
-  "name": "kings-and-pigs",
+  "name": "gamedev",
+  "private": true,
   "version": "1.0.0",
-  "description": "> The Kings and Pigs game using Kaboom",
-  "main": "index.js",
   "scripts": {
-    "dev": "live-server"
+    "dev": "rspack serve",
+    "build": "rspack build"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/dangvanthanh/kings-and-pigs.git"
+  "dependencies": {
+    "bitecs": "^0.3.38",
+    "phaser": "^3.60.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "regenerator-runtime": "^0.13.11"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/dangvanthanh/kings-and-pigs/issues"
-  },
-  "homepage": "https://github.com/dangvanthanh/kings-and-pigs#readme",
   "devDependencies": {
-    "@dangvanthanh/prettier-config": "^1.0.0",
-    "live-server": "^1.2.1"
-  },
-  "prettier": "@dangvanthanh/prettier-config"
+    "@rspack/cli": "latest",
+    "@types/react": "18.2.12",
+    "@types/react-dom": "18.2.5",
+    "typescript": "^5.1.3"
+  }
 }
