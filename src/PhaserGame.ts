@@ -1,13 +1,14 @@
 import Phaser from 'phaser'
 
-import { Bootstrap, Game } from './scenes'
+import { Bootstrap, GameScene } from './scenes'
 
 const config: Phaser.Types.Core.GameConfig = {
 	type: Phaser.AUTO,
 	parent: 'phaser-game',
-	backgroundColor: '#282c34',
+	backgroundColor: 0x5df4f0,
 	scale: {
-		mode: Phaser.Scale.ScaleModes.RESIZE,
+		mode: Phaser.Scale.FIT,
+		autoCenter: Phaser.Scale.CENTER_BOTH,
 		width: window.innerWidth,
 		height: window.innerHeight,
 	},
@@ -18,7 +19,7 @@ const config: Phaser.Types.Core.GameConfig = {
 			debug: true,
 		},
 	},
-	scene: [Bootstrap, Game],
+	scene: [Bootstrap, GameScene],
 }
 // eslint-disable-next-line import/no-anonymous-default-export
 export default new Phaser.Game(config)
