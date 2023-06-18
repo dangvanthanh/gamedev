@@ -1,0 +1,6 @@
+export * from './Arrow'
+export * from './Cloud'
+export * from './Girl'
+export * from './Rainbow'
+export * from './Target'
+export * from './Terrain'

@@ -32,6 +32,28 @@ export class Bootstrap extends Phaser.Scene {
   }
 
   create(): void {
+    // define idle animation
+    this.anims.create({
+      key: "idle",
+      frames: this.anims.generateFrameNumbers("idlegirl", {
+        start: 0,
+        end: 15,
+      }),
+      frameRate: 15,
+      repeat: -1,
+    });
+
+    // define running animation
+    this.anims.create({
+      key: "run",
+      frames: this.anims.generateFrameNumbers("runninggirl", {
+        start: 0,
+        end: 19,
+      }),
+      frameRate: 15,
+      repeat: -1,
+    });
+
     this.createNewGame();
   }
 
