@@ -40,14 +40,18 @@
     ['The Hundredth Door', 49000, 98], ['Heart of a Hundred Mines', 49500, 99]
   ];
   const types = {
-    small: { radius: 17, value: 100, weight: 1.3, color: '#eabc52' },
-    gold: { radius: 29, value: 250, weight: 2.4, color: '#edbc50' },
-    large: { radius: 43, value: 500, weight: 4, color: '#f2c45e' },
+    small: { radius: 17, value: 140, weight: 1.3, color: '#eabc52' },
+    gold: { radius: 29, value: 350, weight: 2.4, color: '#edbc50' },
+    large: { radius: 43, value: 800, weight: 4, color: '#f2c45e' },
     rock: { radius: 34, value: 15, weight: 6, color: '#848477' },
     diamond: { radius: 16, value: 700, weight: .7, color: '#b3efeb' },
-    gem: { radius: 19, value: 250, weight: .9, color: '#95bdaa' },
-    bag: { radius: 22, value: 0, weight: 1, color: '#c8a071' }
+    gem: { radius: 19, value: 300, weight: .9, color: '#95bdaa' },
+    bag: { radius: 22, value: 0, weight: 1, color: '#c8a071' },
+    tnt: { radius: 25, value: 0, weight: 1, color: '#ba4938' },
+    pig: { radius: 26, value: 10, weight: .7, speed: 65, color: '#e6a08c' },
+    diamondPig: { radius: 32, value: 710, weight: .7, speed: 110, color: '#d98d83' }
   };
+  const blastRadius = 120, diamondBonus = 1.5, dynamiteCapacity = 3;
   let level = 0, bank = 0, haul = 0, time = 60, phase = 'ready', objects = [];
   let angle = 0, swing = 0, length = 23, hookState = 'swing', caught = null;
   let dynamite = 0, strength = false, book = false, sound = false, audio;
@@ -85,7 +89,7 @@
       && Number.isFinite(s.swing) && Number.isFinite(s.length) && s.length >= 23 && s.length <= 1200
       && ['swing', 'out', 'back'].includes(s.hookState)
       && Array.isArray(s.taken) && s.taken.every(id => Number.isInteger(id) && id >= 0 && id < map.length)
-      && (s.caughtId === null || (Number.isInteger(s.caughtId) && s.taken.includes(s.caughtId) && s.hookState === 'back'));
+      && (s.caughtId === null || (Number.isInteger(s.caughtId) && s.taken.includes(s.caughtId) && map[s.caughtId]?.type !== 'tnt' && s.hookState === 'back'));
   }
   async function loadProgress() {
     try {
@@ -96,6 +100,7 @@
       if (!validSave(s)) throw new Error('Invalid or unsupported save data');
       ({ level, bank, haul, time, angle, swing, length, hookState, dynamite, strength, book, sound } = s);
       objects = makeMap(level);
+      movePigs();
       objects.forEach(o => { o.taken = s.taken.includes(o.id); });
       caught = s.caughtId === null ? null : objects[s.caughtId];
       // Previous expedition finales have already paid their goals.
@@ -116,24 +121,56 @@
   }
   function makeMap(index) {
     const rand = random(1849 + index * 719);
-    // Preserve the original maps; deeper mines use richer ore rather than overcrowding the field.
+    // Keep placement and IDs stable; value tuning must not consume extra random numbers.
     const density = Math.min(index, 9);
-    const richness = index < 10 ? 1 : levels[index][1] / levels[9][1];
     const kinds = ['large', 'large', 'gold', 'gold', 'small', 'small', 'diamond', 'gem', 'bag', 'rock', 'rock'];
     for (let i = 0; i < density; i++) kinds.push(i % 2 ? 'large' : 'diamond');
     for (let i = 0; i < Math.floor(density / 2); i++) kinds.push('rock');
-    return kinds.map((type, id) => {
+    const map = kinds.map((type, id) => {
       const spec = types[type];
-      return { type, id, ...spec, x: 0, y: 0, taken: false, rotation: rand() * .6 - .3, value: type === 'bag' ? 100 + Math.floor(rand() * 9) * 100 : spec.value };
+      return { type, id, ...spec, x: 0, y: 0, taken: false, rotation: rand() * .6 - .3, value: type === 'bag' ? 100 + Math.floor(rand() * 7) * 100 : spec.value };
     }).reduce((placed, obj) => {
       for (let attempt = 0; attempt < 500; attempt++) {
         obj.x = 85 + rand() * 930;
         obj.y = 220 + rand() * (300 - obj.radius);
         if (placed.every(other => Math.hypot(obj.x - other.x, obj.y - other.y) > obj.radius + other.radius + 18)) break;
       }
-      if (obj.type !== 'rock') obj.value = Math.round(obj.value * richness);
       placed.push(obj); return placed;
     }, []);
+    // Require 24% of stationary treasure in the tutorial, rising to 52% by mine 20.
+    // Pigs are optional upside; goals never depend on catching a moving diamond.
+    const targetShare = .24 + .28 * Math.min(index / 19, 1);
+    const treasure = map.filter(obj => obj.type !== 'rock');
+    const richness = levels[index][1] / (targetShare * treasure.reduce((sum, obj) => sum + obj.value, 0));
+    treasure.forEach(obj => { obj.value = Math.round(obj.value * richness); });
+    // Append hazards after placing treasure so existing saves retain their object IDs and positions.
+    const count = Math.min(6, 1 + Math.floor(index / 4));
+    const hazards = Array(count).fill('tnt');
+    hazards.push(...Array(Math.min(3, 1 + Math.floor(index / 5))).fill('pig'));
+    if (index >= 9) hazards.push(...Array(index >= 19 ? 2 : 1).fill('diamondPig'));
+    for (const type of hazards) {
+      const obj = { type, id: map.length, ...types[type], taken: false, rotation: rand() * .6 - .3 };
+      if (type === 'diamondPig') obj.value = 10 + Math.round(types.diamond.value * richness);
+      for (let attempt = 0; attempt < 500; attempt++) {
+        obj.x = 85 + rand() * 930;
+        obj.y = obj.speed ? 205 + rand() * (H - 245 - obj.radius) : 220 + rand() * 275;
+        if (map.every(other => Math.hypot(obj.x - other.x, obj.y - other.y) > obj.radius + other.radius + (obj.speed ? 4 : 18))) {
+          if (obj.speed) { obj.startX = obj.x; obj.direction = 1; obj.rotation = 0; }
+          map.push(obj); break;
+        }
+      }
+    }
+    return map;
+  }
+  function movePigs() {
+    // Derive patrols from the saved level clock; no extra save state or migration needed.
+    for (const obj of objects) {
+      if (!obj.speed || obj.taken) continue;
+      const left = 40 + obj.radius, span = W - 2 * left;
+      const distance = (obj.startX - left + (60 - time) * obj.speed) % (2 * span);
+      obj.x = left + (distance < span ? distance : 2 * span - distance);
+      obj.direction = distance < span ? 1 : -1;
+    }
   }
   function tone(frequency = 660, duration = .12) {
     if (!sound) return;
@@ -204,16 +241,30 @@
       $('restart').onclick = () => { level = 0; bank = 0; dynamite = 0; strength = false; book = false; startLevel(); };
     }
   }
+  function supplyPrices(index) {
+    const goal = levels[index][1];
+    // Scale sinks with the upcoming mine, rounded to readable $25 price steps.
+    return {
+      dynamite: Math.max(100, Math.ceil(goal * .035 / 25) * 25),
+      strength: Math.max(200, Math.ceil(goal * .12 / 25) * 25),
+      book: Math.max(300, Math.ceil(goal * .18 / 25) * 25)
+    };
+  }
   function renderShop() {
-    showDialog(`<span class="badge">MINE ${String(level + 1).padStart(2, '0')} COMPLETE · SUPPLY POST</span><h2>A little help down below.</h2><p>Goal paid. Your surplus: <strong>${money(bank)}</strong><br>Next mine: ${levels[level + 1][0]} · Goal ${money(levels[level + 1][1])}</p><div class="shop-items"><button class="shop-item" id="buy-dynamite" ${bank < 100 ? 'disabled' : ''}><strong>✹ Dynamite</strong><small>Destroy your catch<br>${dynamite} in your pack</small><span>$100</span></button><button class="shop-item" id="buy-strength" ${bank < 200 || strength ? 'disabled' : ''}><strong>⚡ Strength drink</strong><small>2× pulling speed<br>Next mine only</small><span>${strength ? 'Packed ✓' : '$200'}</span></button><button class="shop-item" id="buy-book" ${bank < 300 || book ? 'disabled' : ''}><strong>◇ Diamond book</strong><small>3× diamond value<br>Next mine only</small><span>${book ? 'Packed ✓' : '$300'}</span></button></div><p>Unspent money counts toward your next goal.</p><button class="primary" id="next">On to mine ${level + 2} →</button>`);
-    $('buy-dynamite').onclick = () => buy('dynamite', 100);
-    $('buy-strength').onclick = () => buy('strength', 200);
-    $('buy-book').onclick = () => buy('book', 300);
+    const prices = supplyPrices(level + 1);
+    showDialog(`<span class="badge">MINE ${String(level + 1).padStart(2, '0')} COMPLETE · SUPPLY POST</span><h2>A little help down below.</h2><p>Goal paid. Your surplus: <strong>${money(bank)}</strong><br>Next mine: ${levels[level + 1][0]} · Goal ${money(levels[level + 1][1])}</p><div class="shop-items"><button class="shop-item" id="buy-dynamite" ${bank < prices.dynamite || dynamite >= dynamiteCapacity ? 'disabled' : ''}><span class="item-icon" aria-hidden="true">🧨</span><strong>Dynamite</strong><small>Destroy your catch<br>${dynamite}/${dynamiteCapacity} in your pack</small><span>${dynamite >= dynamiteCapacity ? 'Pack full' : money(prices.dynamite)}</span></button><button class="shop-item" id="buy-strength" ${bank < prices.strength || strength ? 'disabled' : ''}><span class="item-icon" aria-hidden="true">⚡</span><strong>Strength drink</strong><small>2× pulling speed<br>Next mine only</small><span>${strength ? 'Packed ✓' : money(prices.strength)}</span></button><button class="shop-item" id="buy-book" ${bank < prices.book || book ? 'disabled' : ''}><span class="item-icon" aria-hidden="true">📘</span><strong>Diamond book</strong><small>${diamondBonus}× diamond value<br>Next mine only</small><span>${book ? 'Packed ✓' : money(prices.book)}</span></button></div><p>Supplies cost part of your next goal. Save cash, or invest in a better haul.</p><button class="primary" id="next">On to mine ${level + 2} →</button>`);
+    $('buy-dynamite').onclick = () => buy('dynamite');
+    $('buy-strength').onclick = () => buy('strength');
+    $('buy-book').onclick = () => buy('book');
     $('next').onclick = () => { level++; startLevel(); };
   }
-  function buy(item, cost) {
-    if (phase !== 'shop' || bank < cost || (item === 'strength' && strength) || (item === 'book' && book)) return;
-    bank -= cost;
+  function buy(item) {
+    if (phase !== 'shop' || level >= levels.length - 1) return;
+    const prices = supplyPrices(level + 1);
+    if (!Object.hasOwn(prices, item) || bank < prices[item]
+      || (item === 'dynamite' && dynamite >= dynamiteCapacity)
+      || (item === 'strength' && strength) || (item === 'book' && book)) return;
+    bank -= prices[item];
     if (item === 'dynamite') dynamite++;
     if (item === 'strength') strength = true;
     if (item === 'book') book = true;
@@ -225,11 +276,33 @@
     hookState = 'out'; tone(230, .08); updateHUD();
   }
   const hookPosition = () => ({ x: origin.x + Math.sin(angle) * length, y: origin.y + Math.cos(angle) * length });
+  function burst(pos) {
+    for (let i = 0; i < 32; i++) {
+      const direction = Math.random() * Math.PI * 2, speed = 80 + Math.random() * 180;
+      particles.push({ x: pos.x, y: pos.y, vx: Math.cos(direction) * speed, vy: Math.sin(direction) * speed, life: .7 });
+    }
+  }
+  function detonate(barrel) {
+    const pending = [barrel];
+    barrel.taken = true;
+    while (pending.length) {
+      const source = pending.pop();
+      burst(source);
+      for (const obj of objects) {
+        if (obj.taken || Math.hypot(obj.x - source.x, obj.y - source.y) > blastRadius + obj.radius) continue;
+        obj.taken = true;
+        if (obj.type === 'tnt') pending.push(obj);
+      }
+    }
+    caught = null; hookState = 'back';
+    tone(70, .35); notify('TNT! Nearby treasure destroyed. No points earned.');
+    saveProgress();
+  }
   function explode() {
     if (phase !== 'playing' || !caught || !dynamite) return;
     if (performance.now() >= deadline) { finishLevel(); return; }
     const pos = hookPosition();
-    for (let i = 0; i < 20; i++) particles.push({ x: pos.x, y: pos.y, vx: (Math.random() - .5) * 250, vy: (Math.random() - .5) * 250, life: .7 });
+    burst(pos);
     caught = null; dynamite--; tone(90, .25); notify('Catch destroyed. Back to the good stuff.'); updateHUD(); saveProgress();
   }
   function pause() {
@@ -249,26 +322,32 @@
     if (phase !== 'playing') return;
     time = Math.max(0, (deadline - now) / 1000);
     if (!time) { finishLevel(); return; }
+    movePigs();
     if (hookState === 'swing') { swing += dt * 1.6; angle = Math.sin(swing) * 1.16; }
     else if (hookState === 'out') {
       length += 540 * dt;
       const p = hookPosition();
-      caught = objects.find(o => !o.taken && Math.hypot(o.x - p.x, o.y - p.y) < o.radius + 8) || null;
-      if (caught) { caught.taken = true; hookState = 'back'; tone(320, .08); }
+      // Match paint order when a patrolling pig crosses in front of stationary treasure.
+      caught = objects.findLast(o => !o.taken && Math.hypot(o.x - p.x, o.y - p.y) < o.radius + 8) || null;
+      if (caught?.type === 'tnt') detonate(caught);
+      else if (caught) { caught.taken = true; hookState = 'back'; tone(320, .08); }
       else if (p.x < 20 || p.x > W - 20 || p.y > H - 30) hookState = 'back';
     } else {
       length -= 360 * (strength ? 2 : 1) / (caught ? caught.weight : .65) * dt;
       if (length <= 23) {
         length = 23; hookState = 'swing';
         if (caught) {
-          const value = caught.value * (caught.type === 'diamond' && book ? 3 : 1);
+          const value = caught.type === 'diamondPig'
+            ? 10 + Math.round((caught.value - 10) * (book ? diamondBonus : 1))
+            : Math.round(caught.value * (caught.type === 'diamond' && book ? diamondBonus : 1));
           haul += value;
           popups.push({ text: '+' + money(value), x: 550, y: 90, life: 1.4 });
           if (caught.type === 'bag') notify('Mystery bag! You found ' + money(value) + '.');
+          if (caught.type === 'diamondPig') notify('Diamond-mouth pig! ' + money(value) + ' secured.');
           tone(caught.type === 'rock' ? 180 : 780, .15); caught = null;
-          if (objects.every(o => o.taken)) { finishLevel(); return; }
           saveProgress();
         }
+        if (objects.every(o => o.taken)) { finishLevel(); return; }
       }
     }
     particles.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 250 * dt; p.life -= dt; });
@@ -286,13 +365,67 @@
     const r = obj.radius;
     ctx.save(); ctx.translate(x, y); ctx.rotate(obj.rotation);
     ellipse(3, r * .7, r * .9, r * .35, '#171b183a');
-    if (obj.type === 'diamond' || obj.type === 'gem') {
+    if (obj.speed) {
+      ctx.scale(obj.direction, 1);
+      const stride = obj.taken ? 0 : Math.sin((60 - time) * obj.speed * .2) * 4;
+      line([[-13,10],[-14 + stride,19]], '#d68c7e', 6);
+      line([[9,10],[10 - stride,19]], '#d68c7e', 6);
+      ellipse(-14 + stride, 20, 4, 2.5, '#925b58');
+      ellipse(10 - stride, 20, 4, 2.5, '#925b58');
+      ctx.beginPath(); ctx.arc(-22, -4, 4, 0, Math.PI * 1.8);
+      ctx.strokeStyle = '#e6a08c'; ctx.lineWidth = 3; ctx.stroke();
+      ellipse(-3, 1, 22, 17, obj.color);
+      ellipse(-7, -5, 13, 7, '#f8c3b1');
+      ellipse(-2, 9, 13, 6, '#efb09b');
+      ellipse(12, -2, 13, 13, obj.color);
+      polygon([[5,-11],[3,-22],[12,-18],[16,-11]], '#f3b6a6', '#bd7b70');
+      polygon([[7,-13],[6,-19],[12,-16]], '#dc8d87');
+      ellipse(22, 1, 7, 5.5, '#ffc9b9');
+      ellipse(21, 1, 1.1, 1.7, '#a75e5b');
+      ellipse(25, 1, 1.1, 1.7, '#a75e5b');
+      ellipse(11, 3, 4, 2.5, '#ed9290');
+      ellipse(16, -6, 2.8, 3.3, '#352d29');
+      ellipse(16.8, -7.2, 1, 1.2, '#fff8eb');
+      ctx.beginPath(); ctx.arc(18, 5, 3, .15, Math.PI * .85);
+      ctx.strokeStyle = '#a75e5b'; ctx.lineWidth = 1.2; ctx.stroke();
+      if (obj.type === 'diamondPig') {
+        polygon([[19,5],[23,0],[31,0],[35,5],[27,15]], '#adf4f0', '#4d8e85');
+        polygon([[19,5],[27,5],[27,15]], '#62b9bd');
+        line([[23,0],[27,5],[31,0]], '#efffff', 1);
+        line([[30,-10],[30,-2]], '#efffff', 2);
+        line([[26,-6],[34,-6]], '#efffff', 2);
+      }
+    } else if (obj.type === 'diamond' || obj.type === 'gem') {
       polygon([[-r, -r*.3], [-r*.5, -r], [r*.5, -r], [r, -r*.3], [0, r]], obj.color, '#4d8e85');
       polygon([[-r,-r*.3],[0,-r*.3],[-r*.5,-r]], '#dcfff0');
       polygon([[0,-r*.3],[r,-r*.3],[0,r]], '#5fa99b');
       line([[-r,-r*.3],[r,-r*.3]], '#e2fff0', 1);
       line([[0,-r],[0,-r*.3],[0,r]], '#ddfff4', 1);
       ctx.fillStyle = '#e9fff3'; ctx.fillRect(r+5,-r-4,2,9); ctx.fillRect(r+2,-r-1,8,2);
+    } else if (obj.type === 'tnt') {
+      const shade = ctx.createLinearGradient(-r*.7, 0, r*.7, 0);
+      shade.addColorStop(0, '#762e27'); shade.addColorStop(.3, '#df7050');
+      shade.addColorStop(.65, obj.color); shade.addColorStop(1, '#682b26');
+      ctx.beginPath(); ctx.moveTo(-r*.58, -r*.65);
+      ctx.bezierCurveTo(-r*.8, -r*.3, -r*.8, r*.35, -r*.58, r*.7);
+      ctx.quadraticCurveTo(0, r*.95, r*.58, r*.7);
+      ctx.bezierCurveTo(r*.8, r*.35, r*.8, -r*.3, r*.58, -r*.65);
+      ctx.closePath(); ctx.fillStyle = shade; ctx.fill();
+      ctx.strokeStyle = '#432820'; ctx.lineWidth = 2; ctx.stroke();
+      line([[-r*.3,-r*.6],[-r*.36,0],[-r*.3,r*.72]], '#7e352b', 1);
+      line([[r*.3,-r*.6],[r*.36,0],[r*.3,r*.72]], '#7e352b', 1);
+      ellipse(0, -r*.65, r*.58, r*.2, '#ef9666');
+      ellipse(0, -r*.65, r*.46, r*.12, '#a54c36');
+      line([[-r*.24,-r*.68],[r*.24,-r*.62]], '#e88759', 1);
+      line([[-r*.66,-r*.4],[0,-r*.34],[r*.66,-r*.4]], '#423e35', 6);
+      line([[-r*.66,-r*.43],[0,-r*.37],[r*.66,-r*.43]], '#c6b88d', 3);
+      line([[-r*.66,r*.48],[0,r*.55],[r*.66,r*.48]], '#423e35', 6);
+      line([[-r*.66,r*.45],[0,r*.52],[r*.66,r*.45]], '#c6b88d', 3);
+      ellipse(-r*.48, -r*.41, 1.3, 1.3, '#fff0c5');
+      ellipse(r*.48, r*.49, 1.3, 1.3, '#fff0c5');
+      ctx.fillStyle = '#fff0c5'; ctx.fillRect(-r*.58, -r*.2, r*1.16, r*.5);
+      ctx.strokeStyle = '#71352a'; ctx.lineWidth = 1; ctx.strokeRect(-r*.58, -r*.2, r*1.16, r*.5);
+      ctx.fillStyle = '#782d25'; ctx.font = '900 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('TNT', 0, r*.19);
     } else if (obj.type === 'bag') {
       polygon([[-9,-18],[-13,-27],[0,-23],[12,-27],[8,-16]], '#e0be8a');
       ctx.beginPath(); ctx.moveTo(-8,-15); ctx.bezierCurveTo(-31,9,-24,25,0,24); ctx.bezierCurveTo(26,23,29,8,8,-15); ctx.closePath(); ctx.fillStyle = '#bc905e';ctx.fill();

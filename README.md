@@ -17,7 +17,13 @@ Visit http://localhost:8000. No install or build step is required. Google Fonts 
 
 Every mine has a 60-second limit. Only treasure returned to the winch before time expires counts. Larger gold and rocks take longer to retrieve. Clearing every object also ends the round.
 
-Your available money must meet the level goal. On success, that goal is deducted; the surplus carries into the shop and counts toward the next goal. Shop purchases spend that surplus. Dynamite ($100) persists until used; strength drinks ($200, double retrieval speed) and diamond books ($300, triple diamond value) last for the next mine. Retry restores the current mine and its starting cash, without refunding dynamite already used.
+**TNT barrels:** red barrels marked TNT are scattered among the treasure. Mines 1–4 contain one; another is added every four mines, up to six. Touching a barrel with the hook detonates it underground immediately and returns the hook empty. Each explosion destroys objects touching its 120-pixel blast radius, including gold, rocks, gems, diamonds, and mystery bags. Nearby TNT triggers chain reactions. Destroyed items award no points; banked money and purchased dynamite are unaffected.
+
+**Pigs:** animated pink pigs patrol horizontally at a fixed depth, turn at the mine edges, and stop moving when hooked. Regular pigs move at 65 pixels/second, pull as quickly as diamonds, and pay just $10—even in deeper mines. Mines 1–5 have one, mines 6–10 have two, and later mines have three.
+
+**Diamond-mouth pigs:** from mine 10, a faster pig (110 pixels/second) carries a visible sparkling diamond; from mine 20, there are two. Each pays $10 plus the current mine's full diamond value. The diamond book adds 50% to only the diamond portion, rounded to whole dollars. TNT destroys either pig without awarding points. Patrols freeze while paused and restore from the saved timer; existing treasure and barrel IDs are preserved.
+
+Your available money must meet the level goal. On success, that goal is deducted; the surplus carries into the shop and counts toward the next goal. Shop purchases spend that surplus. Prices scale with the upcoming mine's goal (see Economy below). Dynamite persists until used, with purchases limited to three held charges; strength drinks (double retrieval speed) and diamond books (1.5× diamond value) last for the next mine. Retry restores the current mine and its starting cash, without refunding dynamite already used.
 
 ## Saved progress
 
@@ -137,13 +143,30 @@ Direct `file://` storage behavior varies between browsers. Prefer the local serv
 | 99 | The Hundredth Door | $49,000 |
 | 100 | Heart of a Hundred Mines | $49,500 |
 
-Maps use distinct fixed seeds, with additional valuables and rocks through mine 10. Base values: mystery bags $100–$900, diamonds $700, gems $250, gold $100–$500, and rocks $15. Mines 11–100 retain mine 10's object counts to avoid crowding; non-rock values scale by the mine's goal divided by $4,500, rounded to whole dollars. The 60-second limit remains unchanged.
+Maps use distinct fixed seeds, with additional valuables and rocks through mine 10. Mines 11–100 retain mine 10's treasure and rock counts to avoid crowding. The 60-second limit and listed goals remain unchanged.
 
-Existing mine 1–50 layouts remain unchanged for saved-game compatibility. Old level-10, level-30, and level-50 victory saves open the shop for mine 11, mine 31, and mine 51 respectively, preserving surplus without deducting the completed goal again.
+## Economy and risk versus reward
+
+- **Goal coverage:** stationary treasure is valued so the goal requires 24% of its total in mine 1, increasing linearly to 52% in mine 20 and staying there. This supplies roughly 4.17× the opening goal and 1.92× late goals, allowing missed catches and some TNT losses without requiring a perfect clear. This is a value budget, not a guarantee that every layout is equally accessible in 60 seconds.
+- **Treasure roles:** pre-scaling value weights are small gold 140, medium gold 350, large gold 800, diamonds 700, and gems 300. Large gold pays more per catch but retrieves slowly; small diamonds offer fast returns at the cost of harder aiming. Actual payouts are scaled to the mine's budget and rounded to whole dollars.
+- **Mystery bags:** seeded weights range from 100–700 in steps of 100 before the same scaling. They offer uncertain upside, rather than routinely outpaying a diamond. Normalization prevents a poor bag roll from reducing the mine's total treasure budget.
+- **Hazards and optional rewards:** rocks stay $15, regular pigs $10, and TNT $0. Diamond-mouth pigs pay the scaled diamond value plus $10, but are excluded from the stationary budget: moving targets offer surplus rather than being required by the budget. More hazards in later mines make protecting treasure and choosing a clear hook path matter.
+- **Upgrade opportunity cost:** dynamite costs 3.5% of the next goal (minimum $100), strength 12% (minimum $200), and the diamond book 18% (minimum $300), rounded upward to $25 steps. Strength rewards heavy-gold routes; the book gives 50% extra diamond value and rewards multiple precision catches instead of tripling easy late-game money. Keeping cash remains a valid choice.
+- **Stockpiling:** at most three dynamite charges may be held when buying; charges still persist across mines. Legacy saves above the cap keep their inventory but cannot buy more until below three.
+- **Save compatibility:** layouts, IDs, collected/destroyed state, bank, and already-earned haul are preserved. On reload, remaining treasure (including an in-flight catch) uses the revised payouts, and owned books use the revised 1.5× effect; no currency is retroactively removed.
+
+Existing treasure layouts and object IDs remain unchanged for saved-game compatibility; TNT barrels are appended to each map. Destroyed objects and detonated barrels use the existing saved removal state. Old level-10, level-30, and level-50 victory saves open the shop for mine 11, mine 31, and mine 51 respectively, preserving surplus without deducting the completed goal again.
 
 ## Verification
 
 Completed checks:
+
+- Economy: `node --check game.js` and `git diff --check` passed. A temporary Node VM comparison verified all 100 deterministic treasure budgets, value roles, integer rewards, diamond-pig payouts, monotonic shop prices, actual purchase deductions, invalid/duplicate/unaffordable purchase rejection, pack limits, revised book scoring, and legacy save acceptance. All 100 layouts, IDs, radii, weights, and movement speeds matched the pre-balance version.
+- A simple ray-aiming bot starting each mine with zero bank and no upgrades won 90/100 before and after tuning; all first 20 mines passed after tuning. Remaining failures were mines 23, 25, 35, 57, 75, 79, 82, 84, 85, and 88. This smoke simulation is not a human difficulty benchmark or proof of universal winnability; those layouts need focused playtesting.
+
+- Pigs: syntax and whitespace checks passed. A temporary Node VM check passed across all 100 maps for deterministic spawning, expected pig counts, initial non-overlap, scaled diamond rewards, horizontal bounds/reversal and fixed depth, timer-based position restoration, pause, capture/retrieval, diamond-book scoring, TNT destruction, and legacy save validation. Actual browser animation and persistent reload remain unverified.
+
+- TNT: `node --check game.js` and `git diff --check` passed. A temporary Node VM check passed for all 100 deterministic, non-overlapping maps and expected barrel counts; hook-triggered detonation, three-barrel chains, nearby treasure destruction, outside-radius survival, empty-hook return state, and unchanged money/dynamite. Browser visuals and TNT save/reload remain unverified.
 
 - `node --check game.js` passed.
 - A headless Node VM check with DOM/Canvas stubs passed: all ten maps have non-overlapping treasure and enough available value; hook collision/retrieval, scoring, surplus, shop deductions, duplicate-purchase protection, timeout/retry, and final victory work.
@@ -159,8 +182,19 @@ Manual browser checklist:
 - Pause/resume and switch tabs; confirm the countdown is preserved.
 - Let time expire below the goal; retry the same map with starting cash restored.
 - Meet the goal and finish the round; confirm only surplus remains in the shop.
-- Buy each supply; confirm cash deductions, disabled unaffordable purchases, and next-mine effects.
+- Buy each supply; confirm displayed prices match deductions and grow with the next goal, with disabled unaffordable/duplicate purchases and correct next-mine effects. Verify a fourth dynamite purchase is blocked.
+- Play mines 1, 10, 20, 50, and 100 with no upgrades; compare heavy-gold and precision-diamond strategies, then repeat with strength or a book and assess whether the purchase earns back its cost.
+- Focus playtests on mines 23, 25, 35, 57, 75, 79, 82, 84, 85, and 88; assess clear hook routes, pig interference, TNT losses, and whether the 60-second target is fair.
 - Use dynamite on a rock; confirm no score is awarded and one charge is consumed.
+- Touch a TNT barrel at its edge/corner; confirm immediate underground explosion, visible debris, empty-hook return, and no points or dynamite charge used.
+- Detonate nearby barrels; confirm the chain destroys adjacent gold, rocks, diamonds, gems, and bags but leaves distant objects intact.
+- Reload after a blast; confirm destroyed treasure/barrels stay gone and the hook resumes empty.
+- Destroy the last objects with TNT; confirm the round ends when the empty hook returns.
+- Compare early and later mines; confirm barrel counts increase from one to six and treasure remains reachable.
+- Watch pigs run and turn at the edges at a fixed depth; pause/resume and reload to check patrol restoration.
+- Hook a regular pig, including while it crosses in front of treasure; verify fast retrieval, stopped running, and exactly $10 awarded.
+- In mine 10 or later, catch a faster diamond-mouth pig; verify the diamond value plus $10. With a diamond book, only the diamond portion gains 50%, rounded to whole dollars.
+- Reload with a pig on the hook; verify it stays caught and pays once after retrieval. Detonate TNT beside pigs; verify they disappear without points.
 - Complete mines 10, 30, and 50 and continue to mines 11, 31, and 51; complete mine 100 and start a fresh expedition.
 - Load old level-10, level-30, and level-50 victory saves; confirm the shop opens with the same surplus.
 - Check mobile portrait layout, keyboard focus, dialog focus containment, and sound toggle.
